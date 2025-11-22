@@ -1,0 +1,318 @@
+// Mobius 1 Platform Database Schema
+// This schema defines the core entities for the sovereign AI platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// IDENTITY & TENANCY MODELS
+// ============================================================================
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  password  String   // bcrypt hashed
+  roles     String[] // JSON array of roles
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  lastLoginAt DateTime? @map("last_login_at")
+
+  // Workspace relationship
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Audit trail
+  auditEvents AuditEvent[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+
+  // Organization type for compliance
+  organizationType String @map("organization_type") // 'gestoria' | 'expat_agency' | 'other'
+
+  // Spain residency compliance
+  spainResidencyMode Boolean @default(true) @map("spain_residency_mode")
+
+  // Budget and compliance settings
+  budgetLimits      Json @map("budget_limits") // BudgetConfig as JSON
+  complianceSettings Json @map("compliance_settings") // ComplianceConfig as JSON
+
+  // Encryption context for workspace isolation
+  encryptionContext String @map("encryption_context")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  users       User[]
+  documents   Document[]
+  workflows   WorkflowExecution[]
+  auditEvents AuditEvent[]
+
+  @@map("workspaces")
+}
+
+// ============================================================================
+// DOCUMENT PROCESSING MODELS
+// ============================================================================
+
+model Document {
+  id           String            @id @default(uuid()) @db.Uuid
+  workspaceId  String            @map("workspace_id") @db.Uuid
+  originalName String            @map("original_name")
+  contentHash  String            @map("content_hash") // SHA-256 hash
+  type         DocumentTypeEnum  @map("type")
+  category     DocumentCategory  @map("category")
+  
+  // Encrypted PII data - column-level encryption
+  extractedData String? @map("extracted_data") // Encrypted JSON
+  
+  processingStatus ProcessingStatus @default(PENDING) @map("processing_status")
+  
+  // OCR and processing metadata
+  ocrConfidence Float? @map("ocr_confidence")
+  processingErrors Json? @map("processing_errors")
+  
+  uploadedAt  DateTime  @default(now()) @map("uploaded_at")
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relationships
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, type, createdAt])
+  @@map("documents")
+}
+
+// ============================================================================
+// WORKFLOW & TEMPLATE MODELS
+// ============================================================================
+
+model WorkflowTemplate {
+  id       String           @id @default(uuid()) @db.Uuid
+  name     String
+  category WorkflowCategory @map("category")
+  version  String           @default("1.0")
+
+  // Template definition
+  steps            Json @map("steps") // WorkflowStep[] as JSON
+  validationSchema Json @map("validation_schema") // JSONSchema as JSON
+  outputFormat     Json @map("output_format") // OutputFormat as JSON
+
+  // Metadata
+  description String?
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  executions WorkflowExecution[]
+
+  @@map("workflow_templates")
+}
+
+model WorkflowExecution {
+  id         String @id @default(uuid()) @db.Uuid
+  templateId String @map("template_id") @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+
+  // Execution data
+  inputData    Json                @map("input_data")
+  outputData   Json?               @map("output_data")
+  status       WorkflowStatus      @default(PENDING)
+  currentStep  Int                 @default(0) @map("current_step")
+  
+  // Error handling
+  errorMessage String? @map("error_message")
+  retryCount   Int     @default(0) @map("retry_count")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relationships
+  template  WorkflowTemplate @relation(fields: [templateId], references: [id])
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status, createdAt])
+  @@map("workflow_executions")
+}
+
+// ============================================================================
+// AUDIT & COMPLIANCE MODELS
+// ============================================================================
+
+model AuditEvent {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String?       @map("user_id") @db.Uuid
+  eventType   AuditEventType @map("event_type")
+  
+  // Event details
+  resourceId String  @map("resource_id")
+  action     String
+  metadata   Json    // Additional event context
+  
+  // Compliance tracking
+  residencyValidation Json? @map("residency_validation") // ResidencyValidation as JSON
+  piiRedacted        Boolean @default(false) @map("pii_redacted")
+  
+  // Correlation for distributed tracing
+  correlationId String @map("correlation_id")
+  
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, timestamp])
+  @@index([eventType, timestamp])
+  @@index([correlationId])
+  @@map("audit_events")
+}
+
+model ComplianceReport {
+  id          String            @id @default(uuid()) @db.Uuid
+  workspaceId String            @map("workspace_id") @db.Uuid
+  reportType  ComplianceReportType @map("report_type")
+  
+  // Report metadata
+  timeRangeFrom DateTime @map("time_range_from")
+  timeRangeTo   DateTime @map("time_range_to")
+  
+  // Report content
+  findings        Json   @map("findings") // ComplianceFinding[] as JSON
+  digitalSignature String @map("digital_signature")
+  
+  // Export formats
+  jsonExport String? @map("json_export") // Compressed JSON
+  pdfExport  String? @map("pdf_export")  // Base64 encoded PDF
+  
+  generatedAt DateTime @default(now()) @map("generated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, reportType, generatedAt])
+  @@map("compliance_reports")
+}
+
+// ============================================================================
+// POLICY & GOVERNANCE MODELS
+// ============================================================================
+
+model PolicyEvaluation {
+  id            String @id @default(uuid()) @db.Uuid
+  workspaceId   String @map("workspace_id") @db.Uuid
+  correlationId String @map("correlation_id")
+  
+  // Policy decision
+  decision      Json @map("decision") // PolicyDecision as JSON
+  requestContext Json @map("request_context") // RequestContext as JSON
+  
+  // Performance metrics
+  evaluationTimeMs Int @map("evaluation_time_ms")
+  
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, timestamp])
+  @@index([correlationId])
+  @@map("policy_evaluations")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum DocumentTypeEnum {
+  DNI
+  PASSPORT
+  NIE_TIE
+  VISA
+  PADRON
+  EMPADRONAMIENTO
+  TAX_FORM
+  MODELO_303
+  MODELO_111
+  OTHER
+
+  @@map("document_type")
+}
+
+enum DocumentCategory {
+  VISA
+  TAX
+  IDENTITY
+  OTHER
+
+  @@map("document_category")
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REQUIRES_REVIEW
+
+  @@map("processing_status")
+}
+
+enum WorkflowCategory {
+  MODELO_303
+  NIE_TIE
+  VISA_APPLICATION
+  EMPADRONAMIENTO
+  OTHER
+
+  @@map("workflow_category")
+}
+
+enum WorkflowStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@map("workflow_status")
+}
+
+enum AuditEventType {
+  USER_LOGIN
+  USER_LOGOUT
+  DOCUMENT_UPLOAD
+  DOCUMENT_PROCESS
+  WORKFLOW_START
+  WORKFLOW_COMPLETE
+  POLICY_VIOLATION
+  RESIDENCY_CHECK
+  PII_REDACTION
+  BUDGET_ALERT
+  SYSTEM_ERROR
+
+  @@map("audit_event_type")
+}
+
+enum ComplianceReportType {
+  AESIA_AUDIT
+  GDPR_COMPLIANCE
+  RESIDENCY_VERIFICATION
+  QUARTERLY_REVIEW
+
+  @@map("compliance_report_type")
+}

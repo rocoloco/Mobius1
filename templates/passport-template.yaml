@@ -1,0 +1,100 @@
+# Spanish Passport Document Template
+# Used for validation against extracted OCR data
+
+name: "Spanish Passport"
+type: "PASSPORT"
+category: "IDENTITY"
+version: "1.0"
+
+# Required fields for validation
+required_fields:
+  - documentNumber
+  - fullName
+  - dateOfBirth
+  - nationality
+  - expiryDate
+
+# Optional fields
+optional_fields:
+  - sex
+  - placeOfBirth
+  - issueDate
+  - issuingAuthority
+
+# Field validation rules
+validation_rules:
+  documentNumber:
+    pattern: "^[A-Z]{3}\\d{6}$"
+    description: "3 letters followed by 6 digits"
+    
+  fullName:
+    min_length: 3
+    max_length: 100
+    pattern: "^[A-ZÁÉÍÓÚÑÜ\\s,.-]+$"
+    description: "Full name with Spanish characters"
+    
+  dateOfBirth:
+    pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+    description: "DD/MM/YYYY format"
+    validator: "valid_date"
+    
+  nationality:
+    allowed_values:
+      - "ESPAÑOLA"
+      - "ESP"
+      - "SPANISH"
+    description: "Spanish nationality"
+    
+  sex:
+    allowed_values: ["M", "F"]
+    description: "Male or Female"
+    
+  expiryDate:
+    pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+    description: "DD/MM/YYYY format"
+    validator: "future_date"
+    
+  issueDate:
+    pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+    description: "DD/MM/YYYY format"
+    validator: "valid_date"
+
+# OCR confidence thresholds
+confidence_thresholds:
+  minimum: 0.7
+  target: 0.95
+  
+# Common OCR patterns to look for
+ocr_patterns:
+  document_indicators:
+    - "PASAPORTE"
+    - "PASSPORT"
+    - "ESPAÑA"
+    - "SPAIN"
+    - "UNIÓN EUROPEA"
+    - "EUROPEAN UNION"
+    
+  field_indicators:
+    documentNumber:
+      - "PASAPORTE"
+      - "PASSPORT"
+      - "NÚMERO"
+    fullName:
+      - "APELLIDOS Y NOMBRE"
+      - "SURNAME"
+      - "GIVEN NAMES"
+    dateOfBirth:
+      - "FECHA DE NACIMIENTO"
+      - "DATE OF BIRTH"
+    nationality:
+      - "NACIONALIDAD"
+      - "NATIONALITY"
+    sex:
+      - "SEXO"
+      - "SEX"
+    expiryDate:
+      - "FECHA DE CADUCIDAD"
+      - "DATE OF EXPIRY"
+    issueDate:
+      - "FECHA DE EXPEDICIÓN"
+      - "DATE OF ISSUE"

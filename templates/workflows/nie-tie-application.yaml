@@ -1,0 +1,313 @@
+# NIE/TIE Application Processing Workflow Template
+# Spanish foreigner identification number and card application workflow
+
+id: "nie-tie-application"
+name: "NIE/TIE Application Processing"
+category: "nie_tie"
+version: "1.0"
+description: "Automated processing of Spanish NIE/TIE applications for foreign residents"
+
+metadata:
+  author: "Mobius 1 Platform"
+  createdAt: "2024-01-01T00:00:00Z"
+  updatedAt: "2024-01-01T00:00:00Z"
+  tags: ["nie", "tie", "immigration", "residency"]
+  regulations: ["Ley Orgánica 4/2000", "Real Decreto 557/2011"]
+  applicableRegions: ["ES"]
+
+# Workflow steps with dependencies
+steps:
+  - id: "extract_personal_data"
+    name: "Extract Personal Information"
+    type: "data_extraction"
+    description: "Extract personal details from passport and application documents"
+    dependencies: []
+    optional: false
+    timeout: 90
+    configuration:
+      extractionRules:
+        - field: "fullName"
+          source: "applicantName"
+          transformer: "trim"
+          required: true
+        - field: "dateOfBirth"
+          source: "birthDate"
+          pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+          required: true
+        - field: "nationality"
+          source: "nationality"
+          transformer: "uppercase"
+          required: true
+        - field: "passportNumber"
+          source: "passportNumber"
+          pattern: "^[A-Z0-9]{6,12}$"
+          required: true
+      sourceFields:
+        - "placeOfBirth"
+        - "sex"
+        - "passportExpiryDate"
+
+  - id: "validate_personal_data"
+    name: "Validate Personal Information"
+    type: "validation"
+    description: "Validate extracted personal data for completeness and format"
+    dependencies: ["extract_personal_data"]
+    optional: false
+    configuration:
+      requiredFields: ["fullName", "dateOfBirth", "nationality", "passportNumber"]
+      validationRules:
+        - field: "dateOfBirth"
+          type: "pattern"
+          value: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+          message: "Date of birth must be in DD/MM/YYYY format"
+        - field: "passportNumber"
+          type: "pattern"
+          value: "^[A-Z0-9]{6,12}$"
+          message: "Invalid passport number format"
+
+  - id: "determine_application_type"
+    name: "Determine Application Type"
+    type: "data_extraction"
+    description: "Determine whether this is NIE or TIE application based on circumstances"
+    dependencies: ["validate_personal_data"]
+    optional: false
+    configuration:
+      extractionRules:
+        - field: "applicationType"
+          source: "applicationType"
+          required: true
+        - field: "reasonForApplication"
+          source: "applicationReason"
+          required: true
+        - field: "intendedStayDuration"
+          source: "stayDuration"
+          required: false
+      sourceFields:
+        - "hasSpanishResidency"
+        - "employmentStatus"
+        - "studyProgram"
+
+  - id: "validate_application_eligibility"
+    name: "Validate Application Eligibility"
+    type: "validation"
+    description: "Check eligibility criteria for NIE/TIE application"
+    dependencies: ["determine_application_type"]
+    optional: false
+    configuration:
+      validationRules:
+        - field: "applicationType"
+          type: "required"
+          message: "Application type must be specified"
+        - field: "reasonForApplication"
+          type: "required"
+          message: "Reason for application must be provided"
+
+  - id: "extract_address_data"
+    name: "Extract Address Information"
+    type: "data_extraction"
+    description: "Extract current and Spanish address information"
+    dependencies: ["validate_application_eligibility"]
+    optional: false
+    configuration:
+      extractionRules:
+        - field: "currentAddress"
+          source: "currentAddress"
+          required: true
+        - field: "spanishAddress"
+          source: "spanishAddress"
+          required: false
+        - field: "postalCode"
+          source: "postalCode"
+          pattern: "^\\d{5}$"
+          required: false
+      sourceFields:
+        - "city"
+        - "province"
+        - "country"
+
+  - id: "validate_supporting_documents"
+    name: "Validate Supporting Documents"
+    type: "validation"
+    description: "Check that all required supporting documents are provided"
+    dependencies: ["extract_address_data"]
+    optional: false
+    configuration:
+      requiredFields: ["passportCopy", "applicationForm"]
+      validationRules:
+        - field: "supportingDocuments"
+          type: "required"
+          message: "Supporting documents list must be provided"
+
+  - id: "calculate_fees"
+    name: "Calculate Application Fees"
+    type: "calculation"
+    description: "Calculate required fees based on application type"
+    dependencies: ["validate_supporting_documents"]
+    optional: false
+    configuration:
+      formula: "applicationType === 'nie' ? 12 : (applicationType === 'tie_initial' ? 15.30 : 10.20)"
+      inputFields: ["applicationType"]
+      outputField: "applicationFee"
+
+  - id: "generate_application_forms"
+    name: "Generate Application Forms"
+    type: "form_generation"
+    description: "Generate pre-filled NIE/TIE application forms"
+    dependencies: ["calculate_fees"]
+    optional: false
+    timeout: 180
+    configuration:
+      templatePath: "templates/forms/nie-tie-application.pdf"
+      outputFormat: "pdf"
+
+  - id: "check_appointment_availability"
+    name: "Check Appointment Availability"
+    type: "api_call"
+    description: "Check available appointment slots at immigration offices"
+    dependencies: ["generate_application_forms"]
+    optional: true
+    timeout: 30
+    retryPolicy:
+      maxAttempts: 3
+      backoffMs: 2000
+      backoffMultiplier: 2
+    configuration:
+      endpoint: "https://sede.administracionespublicas.gob.es/icpplus/citar"
+      method: "GET"
+      headers:
+        "User-Agent": "Mobius1-Platform/1.0"
+
+  - id: "prepare_submission_package"
+    name: "Prepare Submission Package"
+    type: "document_merge"
+    description: "Compile all documents and forms for submission"
+    dependencies: ["generate_application_forms"]
+    optional: false
+    configuration:
+      includeDocuments: 
+        - "application_form"
+        - "passport_copy"
+        - "supporting_documents"
+        - "fee_payment_proof"
+      outputFormat: "zip"
+
+  - id: "generate_checklist"
+    name: "Generate Application Checklist"
+    type: "form_generation"
+    description: "Generate checklist for applicant review"
+    dependencies: ["prepare_submission_package"]
+    optional: false
+    configuration:
+      templatePath: "templates/checklists/nie-tie-checklist.pdf"
+      outputFormat: "pdf"
+
+  - id: "notify_completion"
+    name: "Notify Application Ready"
+    type: "notification"
+    description: "Notify applicant that documents are ready for submission"
+    dependencies: ["generate_checklist", "check_appointment_availability"]
+    optional: true
+    configuration:
+      notificationType: "email"
+      template: "nie_tie_application_ready"
+      includeAttachments: true
+
+# Input data validation schema
+validationSchema:
+  type: "object"
+  properties:
+    applicantName:
+      type: "string"
+      description: "Full name as shown in passport"
+    birthDate:
+      type: "string"
+      pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+      description: "Date of birth in DD/MM/YYYY format"
+    nationality:
+      type: "string"
+      description: "Nationality as shown in passport"
+    passportNumber:
+      type: "string"
+      pattern: "^[A-Z0-9]{6,12}$"
+      description: "Passport number"
+    applicationType:
+      type: "string"
+      description: "Type of application: nie, tie_initial, or tie_renewal"
+    applicationReason:
+      type: "string"
+      description: "Reason for NIE/TIE application"
+    currentAddress:
+      type: "object"
+      properties:
+        street:
+          type: "string"
+        city:
+          type: "string"
+        country:
+          type: "string"
+        postalCode:
+          type: "string"
+      required: ["street", "city", "country"]
+      description: "Current address outside Spain"
+    spanishAddress:
+      type: "object"
+      properties:
+        street:
+          type: "string"
+        city:
+          type: "string"
+        province:
+          type: "string"
+        postalCode:
+          type: "string"
+          pattern: "^\\d{5}$"
+      description: "Address in Spain (if applicable)"
+    supportingDocuments:
+      type: "array"
+      items:
+        type: "string"
+      description: "List of supporting document types"
+    preferredOffice:
+      type: "string"
+      description: "Preferred immigration office for appointment"
+  required: ["applicantName", "birthDate", "nationality", "passportNumber", "applicationType", "applicationReason", "currentAddress"]
+  additionalProperties: true
+
+# Output format specification
+outputFormat:
+  type: "pdf"
+  template: "nie_tie_application_output"
+  fields:
+    - name: "fullName"
+      label: "Full Name"
+      type: "text"
+      required: true
+    - name: "passportNumber"
+      label: "Passport Number"
+      type: "text"
+      required: true
+    - name: "applicationType"
+      label: "Application Type"
+      type: "select"
+      options: ["nie", "tie_initial", "tie_renewal"]
+      required: true
+    - name: "applicationFee"
+      label: "Application Fee (EUR)"
+      type: "number"
+      required: true
+    - name: "submissionDeadline"
+      label: "Submission Deadline"
+      type: "date"
+      required: false
+    - name: "appointmentDate"
+      label: "Appointment Date"
+      type: "date"
+      required: false
+    - name: "requiredDocuments"
+      label: "Required Documents"
+      type: "text"
+      required: true
+  metadata:
+    title: "NIE/TIE Application Package"
+    description: "Spanish foreigner identification application"
+    version: "1.0"

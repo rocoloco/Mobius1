@@ -1,0 +1,84 @@
+# Spanish DNI Document Template
+# Used for validation against extracted OCR data
+
+name: "Spanish DNI"
+type: "DNI"
+category: "IDENTITY"
+version: "1.0"
+
+# Required fields for validation
+required_fields:
+  - documentNumber
+  - fullName
+  - dateOfBirth
+  - nationality
+
+# Optional fields
+optional_fields:
+  - sex
+  - placeOfBirth
+  - expiryDate
+  - address
+
+# Field validation rules
+validation_rules:
+  documentNumber:
+    pattern: "^\\d{8}[A-Z]$"
+    description: "8 digits followed by 1 letter"
+    validator: "dni_checksum"
+    
+  fullName:
+    min_length: 3
+    max_length: 100
+    pattern: "^[A-ZÁÉÍÓÚÑÜ\\s]+$"
+    description: "Spanish name with accents"
+    
+  dateOfBirth:
+    pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+    description: "DD/MM/YYYY format"
+    validator: "valid_date"
+    
+  nationality:
+    allowed_values:
+      - "ESPAÑOLA"
+      - "ESP"
+    description: "Spanish nationality"
+    
+  sex:
+    allowed_values: ["M", "F"]
+    description: "Male or Female"
+    
+  expiryDate:
+    pattern: "^\\d{1,2}/\\d{1,2}/\\d{4}$"
+    description: "DD/MM/YYYY format"
+    validator: "future_date"
+
+# OCR confidence thresholds
+confidence_thresholds:
+  minimum: 0.7
+  target: 0.95
+  
+# Common OCR patterns to look for
+ocr_patterns:
+  document_indicators:
+    - "DOCUMENTO NACIONAL DE IDENTIDAD"
+    - "DNI"
+    - "MINISTERIO DEL INTERIOR"
+    
+  field_indicators:
+    documentNumber:
+      - "NÚMERO"
+      - "NUM"
+    fullName:
+      - "APELLIDOS Y NOMBRE"
+      - "NOMBRE"
+    dateOfBirth:
+      - "NACIMIENTO"
+      - "FECHA DE NACIMIENTO"
+    nationality:
+      - "NACIONALIDAD"
+    sex:
+      - "SEXO"
+    expiryDate:
+      - "VÁLIDO HASTA"
+      - "VÁLIDA HASTA"

@@ -1,0 +1,227 @@
+# Modelo 303 VAT Return Workflow Template
+# Spanish quarterly VAT return processing workflow
+
+id: "modelo-303-vat-return"
+name: "Modelo 303 VAT Return Processing"
+category: "modelo_303"
+version: "1.0"
+description: "Automated processing of Spanish Modelo 303 quarterly VAT returns"
+
+metadata:
+  author: "Mobius 1 Platform"
+  createdAt: "2024-01-01T00:00:00Z"
+  updatedAt: "2024-01-01T00:00:00Z"
+  tags: ["vat", "tax", "modelo-303", "quarterly"]
+  regulations: ["Ley 37/1992", "Real Decreto 1624/1992"]
+  applicableRegions: ["ES"]
+
+# Workflow steps with dependencies
+steps:
+  - id: "extract_company_data"
+    name: "Extract Company Information"
+    type: "data_extraction"
+    description: "Extract company details from input documents"
+    dependencies: []
+    optional: false
+    timeout: 60
+    configuration:
+      extractionRules:
+        - field: "nif"
+          source: "companyNIF"
+          pattern: "^[A-Z]\\d{8}$|^\\d{8}[A-Z]$"
+          required: true
+        - field: "companyName"
+          source: "companyName"
+          transformer: "trim"
+          required: true
+        - field: "taxPeriod"
+          source: "taxPeriod"
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          required: true
+      sourceFields:
+        - "economicActivity"
+        - "address"
+
+  - id: "validate_company_data"
+    name: "Validate Company Information"
+    type: "validation"
+    description: "Validate extracted company data"
+    dependencies: ["extract_company_data"]
+    optional: false
+    configuration:
+      requiredFields: ["nif", "companyName", "taxPeriod"]
+      validationRules:
+        - field: "nif"
+          type: "pattern"
+          value: "^[A-Z]\\d{8}$|^\\d{8}[A-Z]$"
+          message: "Invalid NIF format"
+        - field: "taxPeriod"
+          type: "pattern"
+          value: "^\\d{4}-(0[1-9]|1[0-2])$"
+          message: "Tax period must be in YYYY-MM format"
+
+  - id: "extract_vat_data"
+    name: "Extract VAT Transaction Data"
+    type: "data_extraction"
+    description: "Extract VAT-related financial data"
+    dependencies: ["validate_company_data"]
+    optional: false
+    timeout: 120
+    configuration:
+      extractionRules:
+        - field: "vatBase"
+          source: "totalSales"
+          transformer: "number"
+          required: true
+        - field: "vatRate"
+          source: "vatRate"
+          transformer: "number"
+          required: false
+        - field: "deductibleVAT"
+          source: "inputVAT"
+          transformer: "number"
+          required: true
+      sourceFields:
+        - "exemptSales"
+        - "exportSales"
+        - "intraCommunityAcquisitions"
+
+  - id: "calculate_vat_obligations"
+    name: "Calculate VAT Obligations"
+    type: "calculation"
+    description: "Calculate net VAT amount due or refundable"
+    dependencies: ["extract_vat_data"]
+    optional: false
+    configuration:
+      formula: "vatBase * (vatRate || 0.21) - deductibleVAT"
+      inputFields: ["vatBase", "vatRate", "deductibleVAT"]
+      outputField: "netVATAmount"
+
+  - id: "validate_calculations"
+    name: "Validate VAT Calculations"
+    type: "validation"
+    description: "Ensure calculations are within reasonable ranges"
+    dependencies: ["calculate_vat_obligations"]
+    optional: false
+    configuration:
+      validationRules:
+        - field: "netVATAmount"
+          type: "range"
+          value: [-1000000, 1000000]
+          message: "VAT amount seems unreasonable (outside ±1M EUR range)"
+
+  - id: "generate_modelo_303"
+    name: "Generate Modelo 303 Form"
+    type: "form_generation"
+    description: "Generate official Modelo 303 PDF form"
+    dependencies: ["validate_calculations"]
+    optional: false
+    timeout: 180
+    configuration:
+      templatePath: "templates/forms/modelo-303.pdf"
+      outputFormat: "pdf"
+
+  - id: "validate_form_completeness"
+    name: "Validate Form Completeness"
+    type: "validation"
+    description: "Ensure all required form fields are populated"
+    dependencies: ["generate_modelo_303"]
+    optional: false
+    configuration:
+      requiredFields: 
+        - "nif"
+        - "companyName"
+        - "taxPeriod"
+        - "netVATAmount"
+        - "formGenerated"
+
+  - id: "prepare_submission_data"
+    name: "Prepare Submission Package"
+    type: "document_merge"
+    description: "Prepare final submission package with supporting documents"
+    dependencies: ["validate_form_completeness"]
+    optional: false
+    configuration:
+      includeDocuments: ["modelo_303_form", "supporting_invoices", "bank_statements"]
+      outputFormat: "zip"
+
+  - id: "notify_completion"
+    name: "Notify Processing Completion"
+    type: "notification"
+    description: "Send completion notification to user"
+    dependencies: ["prepare_submission_data"]
+    optional: true
+    configuration:
+      notificationType: "email"
+      template: "modelo_303_completion"
+
+# Input data validation schema
+validationSchema:
+  type: "object"
+  properties:
+    companyNIF:
+      type: "string"
+      pattern: "^[A-Z]\\d{8}$|^\\d{8}[A-Z]$"
+      description: "Spanish company NIF"
+    companyName:
+      type: "string"
+      description: "Company legal name"
+    taxPeriod:
+      type: "string"
+      pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+      description: "Tax period in YYYY-MM format"
+    totalSales:
+      type: "number"
+      minimum: 0
+      description: "Total sales amount for the period"
+    inputVAT:
+      type: "number"
+      minimum: 0
+      description: "Total deductible input VAT"
+    vatRate:
+      type: "number"
+      minimum: 0
+      maximum: 1
+      description: "VAT rate (0.21 for standard rate)"
+    economicActivity:
+      type: "string"
+      description: "CNAE economic activity code"
+    paymentMethod:
+      type: "string"
+      description: "Preferred payment method"
+  required: ["companyNIF", "companyName", "taxPeriod", "totalSales", "inputVAT"]
+  additionalProperties: true
+
+# Output format specification
+outputFormat:
+  type: "pdf"
+  template: "modelo_303_output"
+  fields:
+    - name: "nif"
+      label: "NIF"
+      type: "text"
+      required: true
+    - name: "companyName"
+      label: "Company Name"
+      type: "text"
+      required: true
+    - name: "taxPeriod"
+      label: "Tax Period"
+      type: "text"
+      required: true
+    - name: "vatBase"
+      label: "VAT Base Amount"
+      type: "number"
+      required: true
+    - name: "netVATAmount"
+      label: "Net VAT Amount"
+      type: "number"
+      required: true
+    - name: "submissionDeadline"
+      label: "Submission Deadline"
+      type: "date"
+      required: false
+  metadata:
+    title: "Modelo 303 VAT Return"
+    description: "Spanish quarterly VAT return form"
+    version: "1.0"
