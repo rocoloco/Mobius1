@@ -5,16 +5,34 @@ dist/
 .build/
 .env
 .env.*
+!.env.example
+
 # Python
 __pycache__/
 *.pyc
+
 # OS
 .DS_Store
 Thumbs.db
+
 # Logs
 logs/
 *.log
+
 # Artifacts
 coverage/
 .tmp/
 .generated/
+
+# Security - NEVER commit these!
+keys/
+certs/
+.secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Prisma
+prisma/migrations/

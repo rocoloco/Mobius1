@@ -11,6 +11,8 @@ Sovereign AI infrastructure platform for Spanish gestorías and expat relocation
 - Docker and Docker Compose
 - PostgreSQL (via Docker)
 
+**Windows Users**: See [Windows Setup Guide](./docs/WINDOWS-SETUP.md) for detailed installation instructions.
+
 ### Development Setup
 
 1. **Clone and install dependencies**
@@ -86,6 +88,27 @@ The platform follows a layered architecture:
 - **PII Redaction** - Automatic redaction of sensitive information in logs
 - **Audit Trail** - Comprehensive logging for AESIA compliance
 - **GDPR Compliance** - Built-in data protection and privacy controls
+
+## Security
+
+Mobius 1 implements defense-in-depth security:
+
+- **Encryption**: AES-256-GCM for PII data with workspace isolation
+- **TLS 1.3**: Enforced for all production communications
+- **Key Management**: Automated rotation with 90-day workspace key policy
+- **Secrets Management**: Secure credential storage and rotation
+
+**Quick Start**:
+```bash
+# Generate keys and certificates
+npm run security:generate-keys
+npm run security:generate-certs
+
+# Run security tests
+npm test tests/security/
+```
+
+See [Security Documentation](./docs/security/README.md) for details.
 
 ## Development
 

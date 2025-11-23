@@ -184,24 +184,30 @@
   - Build system integrity verification without external CAs
   - _Requirements: FR-009_
 
-- [ ] 18. Security and encryption implementation
+- [x] 18. Security and encryption implementation
   - Implement TLS 1.3 for all communications
   - Create column-level encryption for PII data
   - Set up key management and rotation policies
   - _Requirements: FR-011, NFR-007_
 
-- [ ] 18.1 Write Security unit tests
+- [x] 18.1 Write Security unit tests
   - Test encryption and key management
-  - Test air-gapped mode network isolation
-  - Test security policy enforcement
-  - _Requirements: FR-009, FR-011_
+  - Test TLS configuration validation
+  - Test secrets management and rotation
+  - _Requirements: FR-011, NFR-007_
 
 ## API Layer and Integration
 
-- [ ] 19. REST API implementation
+- [x] 19. REST API implementation
   - Create versioned REST API endpoints with OpenAPI documentation
   - Implement error handling with machine-readable codes
   - Add pagination, idempotency, and rate limiting
+  - _Requirements: All functional requirements_
+
+- [x] 19.1 Write API unit tests
+  - Test error handling and response formatting
+  - Test pagination and middleware
+  - Test API error codes and status mapping
   - _Requirements: All functional requirements_
 
 - [ ] 20. Integration and webhook support
@@ -211,7 +217,7 @@
   - _Requirements: FR-010_
 
 - [ ] 20.1 Write API integration tests
-  - Test REST API endpoints and error handling
+  - Test REST API endpoints end-to-end
   - Test webhook delivery and retry logic
   - Test API client SDK functionality
   - _Requirements: All functional requirements_

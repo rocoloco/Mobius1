@@ -50,6 +50,10 @@ const configSchema = z.object({
   security: z.object({
     jwtSecret: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
     encryptionKey: z.string().length(32, 'ENCRYPTION_KEY must be exactly 32 characters'),
+    tlsEnabled: z.coerce.boolean(),
+    tlsCertPath: z.string().optional(),
+    tlsKeyPath: z.string().optional(),
+    tlsCaPath: z.string().optional(),
   }),
 
   // Compliance Configuration
@@ -123,6 +127,10 @@ function parseConfig() {
     security: {
       jwtSecret: process.env.JWT_SECRET,
       encryptionKey: process.env.ENCRYPTION_KEY,
+      tlsEnabled: process.env.TLS_ENABLED || 'false',
+      tlsCertPath: process.env.TLS_CERT_PATH,
+      tlsKeyPath: process.env.TLS_KEY_PATH,
+      tlsCaPath: process.env.TLS_CA_PATH,
     },
     compliance: {
       spainResidencyMode: process.env.SPAIN_RESIDENCY_MODE || 'true',

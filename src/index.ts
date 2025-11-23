@@ -7,26 +7,60 @@
 import Fastify from 'fastify';
 
 import { appConfig, isDevelopment } from './config/index.js';
+import { createTLSOptions, validateTLSConfig } from './security/tls.js';
 import { healthCheckService } from './health/index.js';
 import { db } from './database/client.js';
-import { registerAuthRoutes } from './auth/index.js';
 import { controlPlaneOrchestrator } from './control-plane/index.js';
 import { PipesHubService } from './pipeshub/index.js';
-import { pipesHubRoutes } from './pipeshub/routes.js';
 import { TemplateManager, WorkflowEngine } from './template-layer/index.js';
-import { registerTemplateRoutes } from './template-layer/routes.js';
 import { RuntimeFactory } from './runtime/index.js';
-import { registerRuntimeRoutes } from './runtime/routes.js';
-import { complianceRoutes } from './compliance/routes.js';
+
+// API Layer
+import { registerSwagger } from './api/swagger.js';
+import { registerPlugins } from './api/plugins.js';
+import { registerV1Routes } from './api/routes/index.js';
+import {
+  correlationIdMiddleware,
+  responseHeadersMiddleware,
+  idempotencyMiddleware,
+  requestValidationMiddleware,
+} from './api/middleware.js';
+import { APIException, createErrorResponse, getStatusCodeForError } from './api/errors.js';
 
 /**
  * Create and configure Fastify application
  */
+let tlsOptions = null;
+if (appConfig.security.tlsEnabled) {
+  const tlsValidation = validateTLSConfig({
+    certPath: appConfig.security.tlsCertPath,
+    keyPath: appConfig.security.tlsKeyPath,
+    caPath: appConfig.security.tlsCaPath,
+  });
+
+  if (!tlsValidation.valid) {
+    console.error('TLS configuration validation failed:', tlsValidation.errors);
+    process.exit(1);
+  }
+
+  tlsOptions = createTLSOptions({
+    certPath: appConfig.security.tlsCertPath,
+    keyPath: appConfig.security.tlsKeyPath,
+    caPath: appConfig.security.tlsCaPath,
+  });
+}
+
 const app = Fastify({
   logger: {
     level: appConfig.logging.level,
-    redact: appConfig.logging.redactPII ? ['req.headers.authorization', 'req.body.password'] : [],
+    redact: appConfig.logging.redactPII
+      ? ['req.headers.authorization', 'req.body.password', 'req.body.dni', 'req.body.nie', 'req.body.passport']
+      : [],
   },
+  https: tlsOptions || undefined,
+  trustProxy: true, // Trust X-Forwarded-* headers
+  requestIdHeader: 'x-correlation-id',
+  requestIdLogLabel: 'correlationId',
 });
 
 // Add database to Fastify instance for use in routes
@@ -54,6 +88,57 @@ app.decorate('pipesHub', pipesHubService);
 app.decorate('templateManager', templateManager);
 app.decorate('workflowEngine', workflowEngine);
 app.decorate('runtime', runtime);
+
+// Register API middleware
+app.addHook('onRequest', correlationIdMiddleware);
+app.addHook('onRequest', responseHeadersMiddleware);
+app.addHook('preHandler', idempotencyMiddleware);
+app.addHook('preHandler', requestValidationMiddleware);
+
+// Global error handler
+app.setErrorHandler((error, request, reply) => {
+  const correlationId = request.headers['x-correlation-id'] as string;
+
+  // Handle API exceptions
+  if (error instanceof APIException) {
+    reply.status(error.statusCode || 500).send(
+      createErrorResponse(
+        error.code,
+        error.message,
+        error.details,
+        correlationId,
+        request.url
+      )
+    );
+    return;
+  }
+
+  // Handle validation errors
+  if (error.validation) {
+    reply.status(400).send(
+      createErrorResponse(
+        'E001',
+        'Validation error',
+        error.validation,
+        correlationId,
+        request.url
+      )
+    );
+    return;
+  }
+
+  // Handle generic errors
+  app.log.error({ error, correlationId }, 'Unhandled error');
+  reply.status(error.statusCode || 500).send(
+    createErrorResponse(
+      'E500',
+      isDevelopment() ? error.message : 'Internal server error',
+      isDevelopment() ? { stack: error.stack } : undefined,
+      correlationId,
+      request.url
+    )
+  );
+});
 
 /**
  * Health check endpoint
@@ -203,27 +288,17 @@ async function start() {
     await controlPlaneOrchestrator.start();
     app.log.info('Control Plane Orchestrator started - health monitoring active');
 
-    // Register authentication routes
-    await registerAuthRoutes(app);
-    app.log.info('Authentication routes registered');
+    // Register API plugins (CORS, Helmet, Rate Limiting)
+    await registerPlugins(app);
+    app.log.info('API plugins registered');
 
-    // Register PipesHub routes
-    await app.register(pipesHubRoutes, { prefix: '/api/v1/pipeshub' });
-    app.log.info('PipesHub routes registered');
+    // Register Swagger documentation
+    await registerSwagger(app);
+    app.log.info('Swagger documentation registered at /docs');
 
-    // Register Template Layer routes
-    await app.register(async (fastify) => {
-      await registerTemplateRoutes(fastify, templateManager, workflowEngine);
-    }, { prefix: '/api/v1/templates' });
-    app.log.info('Template Layer routes registered');
-
-    // Register Runtime Layer routes
-    await app.register(registerRuntimeRoutes, { prefix: '/api/v1' });
-    app.log.info('Runtime Layer routes registered');
-
-    // Register Compliance routes
-    await app.register(complianceRoutes, { prefix: '/api/v1/compliance' });
-    app.log.info('Compliance routes registered');
+    // Register all API routes
+    await registerV1Routes(app);
+    app.log.info('API v1 routes registered');
 
     // Start the server
     await app.listen({
