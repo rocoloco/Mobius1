@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .icon-primary { fill: #C1EDCC; }
+      .icon-accent { fill: #048BA8; }
+    }
+    @media (prefers-color-scheme: light) {
+      .icon-primary { fill: #048BA8; }
+      .icon-accent { fill: #061A40; }
+    }
+  </style>
+  <g transform="translate(50, 80) scale(0.5)">
+    <polygon class="icon-primary" points="700.7,272.1 829.1,150.8 829.1,467.7 767.3,409.3 767.3,286.3 742.7,310.9"/>
+    <path class="icon-accent" d="M551.5,150.8c60.7,56.3,120.2,113.1,181.4,169.9l-42.1,41.5l-77-76.5v123.5h135.5l61.7,57.4H552l0,0l0,0V150.3L551.5,150.8z"/>
+  </g>
+</svg>
