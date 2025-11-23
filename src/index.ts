@@ -14,6 +14,7 @@ import { controlPlaneOrchestrator } from './control-plane/index.js';
 import { PipesHubService } from './pipeshub/index.js';
 import { TemplateManager, WorkflowEngine } from './template-layer/index.js';
 import { RuntimeFactory } from './runtime/index.js';
+import { WebhookService } from './webhooks/service.js';
 
 // API Layer
 import { registerSwagger } from './api/swagger.js';
@@ -83,11 +84,15 @@ const workflowEngine = new WorkflowEngine(db, templateManager);
 // Initialize Runtime Layer
 const runtime = RuntimeFactory.getInstance(appConfig);
 
+// Initialize Webhook Service
+const webhookService = new WebhookService(db);
+
 // Add services to Fastify instance
 app.decorate('pipesHub', pipesHubService);
 app.decorate('templateManager', templateManager);
 app.decorate('workflowEngine', workflowEngine);
 app.decorate('runtime', runtime);
+app.decorate('webhookService', webhookService);
 
 // Register API middleware
 app.addHook('onRequest', correlationIdMiddleware);
@@ -248,6 +253,10 @@ async function gracefulShutdown(signal: string) {
       await (runtime as any).shutdown();
       app.log.info('Runtime Layer shutdown');
     }
+    
+    // Cleanup Webhook Service
+    await webhookService.cleanup();
+    app.log.info('Webhook service cleaned up');
     
     // Close Fastify server
     await app.close();

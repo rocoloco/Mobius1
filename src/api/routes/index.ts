@@ -9,6 +9,7 @@ import { pipesHubRoutes } from '../../pipeshub/routes.js';
 import { registerTemplateRoutes } from '../../template-layer/routes.js';
 import { registerRuntimeRoutes } from '../../runtime/routes.js';
 import { complianceRoutes } from '../../compliance/routes.js';
+import { registerWebhookRoutes } from '../../webhooks/routes.js';
 
 /**
  * Register all v1 API routes
@@ -34,5 +35,11 @@ export async function registerV1Routes(fastify: FastifyInstance) {
 
     // Compliance routes
     await api.register(complianceRoutes, { prefix: '/compliance' });
+
+    // Webhook routes
+    await api.register(async (webhooks) => {
+      const webhookService = fastify.webhookService;
+      await registerWebhookRoutes(webhooks, webhookService);
+    });
   }, { prefix: '/api/v1' });
 }

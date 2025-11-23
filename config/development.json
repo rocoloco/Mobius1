@@ -1,0 +1,33 @@
+{
+  "environment": "development",
+  "features": {
+    "aiCopilot": true,
+    "documentProcessing": true,
+    "complianceExport": true,
+    "webhooks": true
+  },
+  "limits": {
+    "maxWorkspaces": 10,
+    "maxUsersPerWorkspace": 5,
+    "maxDocumentsPerWorkspace": 1000,
+    "maxApiRequestsPerMinute": 100
+  },
+  "performance": {
+    "cacheEnabled": true,
+    "cacheTTL": 60,
+    "maxConcurrentRequests": 10,
+    "requestTimeout": 30000
+  },
+  "security": {
+    "strictMode": false,
+    "allowedOrigins": ["*"],
+    "sessionTimeout": 7200,
+    "maxLoginAttempts": 10
+  },
+  "observability": {
+    "tracingEnabled": true,
+    "metricsEnabled": true,
+    "logLevel": "debug",
+    "samplingRate": 1.0
+  }
+}

@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { PipesHubService } from '../pipeshub/service.js';
 import { TemplateManager, WorkflowEngine } from '../template-layer/index.js';
 import type { RuntimeAPI } from '../runtime/index.js';
+import { WebhookService } from '../webhooks/service.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -15,6 +16,7 @@ declare module 'fastify' {
     templateManager: TemplateManager;
     workflowEngine: WorkflowEngine;
     runtime: RuntimeAPI;
+    webhookService: WebhookService;
     authenticate: any; // JWT authentication hook
   }
 }

@@ -18,10 +18,17 @@
     "db:studio": "prisma studio",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
+    "deploy": "bash scripts/deploy.sh",
+    "deploy:windows": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
+    "deploy:validate": "tsx scripts/validate-dependencies.ts",
+    "deploy:rollback": "bash scripts/rollback.sh",
     "security:generate-keys": "bash scripts/generate-keys.sh",
     "security:generate-certs": "bash scripts/generate-certs.sh",
     "security:audit": "npm audit --audit-level=moderate",
-    "security:check": "tsx scripts/security-audit.ts"
+    "security:check": "tsx scripts/security-audit.ts",
+    "secrets:rotate": "tsx scripts/rotate-secrets.ts",
+    "config:validate": "tsx scripts/validate-config.ts",
+    "airgap:control": "tsx scripts/airgap-control.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
