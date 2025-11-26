@@ -12,7 +12,7 @@
 import { readFile, readdir, stat } from 'fs/promises';
 import { createHash } from 'crypto';
 import { join } from 'path';
-import { auditLogger } from '../audit/logger.js';
+import { auditService, AuditEventType, AuditSeverity } from '../audit/index.js';
 
 export interface IntegrityManifest {
   version: string;
@@ -56,26 +56,32 @@ export class IntegrityVerifier {
     try {
       await this.loadManifest();
 
-      await auditLogger.log({
-        eventType: 'airgap.integrity.initialized',
+      await auditService.logEvent({
+        eventType: AuditEventType.SYSTEM_ERROR,
+        severity: AuditSeverity.INFO,
         userId: 'system',
         workspaceId: 'system',
-        resourceType: 'integrity',
         resourceId: 'verifier',
         action: 'initialize',
-        outcome: 'success',
-        metadata: { manifestLoaded: this.manifest !== null },
+        metadata: { 
+          manifestLoaded: this.manifest !== null,
+          outcome: 'success',
+        },
+        correlationId: 'airgap-integrity-init',
       });
     } catch (error) {
-      await auditLogger.log({
-        eventType: 'airgap.integrity.initialized',
+      await auditService.logEvent({
+        eventType: AuditEventType.SYSTEM_ERROR,
+        severity: AuditSeverity.ERROR,
         userId: 'system',
         workspaceId: 'system',
-        resourceType: 'integrity',
         resourceId: 'verifier',
         action: 'initialize',
-        outcome: 'failure',
-        metadata: { error: error instanceof Error ? error.message : 'Unknown' },
+        metadata: { 
+          error: error instanceof Error ? error.message : 'Unknown',
+          outcome: 'failure',
+        },
+        correlationId: 'airgap-integrity-init',
       });
     }
   }
@@ -100,15 +106,18 @@ export class IntegrityVerifier {
       signature: '', // Would be signed with private key
     };
 
-    await auditLogger.log({
-      eventType: 'airgap.manifest.generated',
+    await auditService.logEvent({
+      eventType: AuditEventType.CONFIGURATION_CHANGE,
+      severity: AuditSeverity.INFO,
       userId: 'system',
       workspaceId: 'system',
-      resourceType: 'integrity',
       resourceId: 'manifest',
       action: 'generate',
-      outcome: 'success',
-      metadata: { fileCount: files.length },
+      metadata: { 
+        fileCount: files.length,
+        outcome: 'success',
+      },
+      correlationId: 'airgap-manifest-gen',
     });
 
     return manifest;
@@ -165,19 +174,20 @@ export class IntegrityVerifier {
       }
     }
 
-    await auditLogger.log({
-      eventType: 'airgap.integrity.verified',
+    await auditService.logEvent({
+      eventType: result.valid ? AuditEventType.HEALTH_CHECK : AuditEventType.SYSTEM_ERROR,
+      severity: result.valid ? AuditSeverity.INFO : AuditSeverity.ERROR,
       userId: 'system',
       workspaceId: 'system',
-      resourceType: 'integrity',
       resourceId: 'system',
       action: 'verify',
-      outcome: result.valid ? 'success' : 'failure',
       metadata: {
         filesChecked: result.filesChecked,
         filesModified: result.filesModified.length,
         filesMissing: result.filesMissing.length,
+        outcome: result.valid ? 'success' : 'failure',
       },
+      correlationId: 'airgap-integrity-verify',
     });
 
     return result;
@@ -241,15 +251,18 @@ export class IntegrityVerifier {
       // In production, would use proper certificate parsing library
       const valid = errors.length === 0;
 
-      await auditLogger.log({
-        eventType: 'airgap.certificate.verified',
+      await auditService.logEvent({
+        eventType: valid ? AuditEventType.HEALTH_CHECK : AuditEventType.SYSTEM_ERROR,
+        severity: valid ? AuditSeverity.INFO : AuditSeverity.ERROR,
         userId: 'system',
         workspaceId: 'system',
-        resourceType: 'certificate',
         resourceId: certPath,
         action: 'verify',
-        outcome: valid ? 'success' : 'failure',
-        metadata: { errors },
+        metadata: { 
+          errors,
+          outcome: valid ? 'success' : 'failure',
+        },
+        correlationId: 'airgap-cert-verify',
       });
 
       return { valid, errors };
