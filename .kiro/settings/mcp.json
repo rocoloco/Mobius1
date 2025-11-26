@@ -12,7 +12,12 @@
         "fill",
         "evaluate_script",
         "press_key",
-        "take_screenshot"
+        "take_screenshot",
+        "list_console_messages",
+        "resize_page",
+        "navigate_page",
+        "performance_start_trace",
+        "performance_analyze_insight"
       ]
     },
     "figma": {
